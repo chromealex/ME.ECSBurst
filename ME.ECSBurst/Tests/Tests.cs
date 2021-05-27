@@ -16,49 +16,6 @@ namespace ME.ECSBurst.Tests {
 
         }
 
-        [Unity.Burst.BurstCompileAttribute]
-        private struct Job : Unity.Jobs.IJob {
-
-            public Filter filter;
-            public World world;
-
-            public void Execute() {
-
-                var entity = this.world.AddEntity();
-
-                this.world.Set(entity, new Item() { a = 999 });
-                var element = this.world.Get<Item>(entity);
-                UnityEngine.Debug.Log(string.Format("{0}", element.a));
-                ref var a = ref this.world.Get<Item>(entity);
-                a.a = 123;
-                UnityEngine.Debug.Log(string.Format("{0}", a.a));
-                var element2 = this.world.Get<Item>(entity);
-                UnityEngine.Debug.Log(string.Format("{0}", element2.a));
-                this.world.Remove<Item>(entity);
-                UnityEngine.Debug.Log(string.Format("{0}", this.world.Has<Item>(entity)));
-                ref var a2 = ref this.world.Get<Item>(entity);
-                UnityEngine.Debug.Log(string.Format("{0}", a2.a));
-                a2.a = 234;
-                
-                foreach (var ent in filter) {
-
-                    UnityEngine.Debug.Log(string.Format("ENTITY #{0} gen {1}", ent.id, ent.generation));
-                    this.world.RemoveEntity(in ent);
-                
-                }
-                
-                UnityEngine.Debug.Log(string.Format("ISALIVE: {0}", this.world.IsAlive(entity)));
-
-                foreach (var ent in filter) {
-
-                    UnityEngine.Debug.Log(string.Format("ENTITY #{0} gen {1}", ent.id, ent.generation));
-                
-                }
-
-            }
-
-        }
-
         public struct TestSystem : IOnCreate, IAdvanceTick {
 
             public Filter filter;

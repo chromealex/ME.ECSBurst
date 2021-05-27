@@ -44,6 +44,13 @@ namespace ME.ECSBurst {
 
         }
 
+        public void Validate(int entityId) {
+
+            ArrayUtils.Resize(entityId, ref this.data);
+            ArrayUtils.Resize(entityId, ref this.dataExists);
+            
+        }
+
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -61,8 +68,8 @@ namespace ME.ECSBurst {
 
         public void Validate(int entityId) {
 
-            ArrayUtils.Resize(entityId, ref this.data);
             ArrayUtils.Resize(entityId, ref this.dataExists);
+            ArrayUtils.Resize(entityId, ref this.data);
             
         }
 
@@ -111,7 +118,23 @@ namespace ME.ECSBurst {
                     
                 }
                 
+                UnityEngine.Debug.Log("Validate " + entityId + " :: " + i);
                 ref var item = ref mref<StructComponentsItemUnknown>((void*)this.list[i]);
+                item.Validate(entityId);
+                //UnsafeUtility.CopyStructureToPtr(ref item, (void*)this.list[i]);
+
+            }
+
+        }
+        
+        public void Validate<T>(int entityId) where T : struct {
+
+            var id = WorldUtilities.GetAllComponentTypeId<T>();
+            ArrayUtils.Resize(id, ref this.list);
+
+            for (int i = 0; i < this.list.Length; ++i) {
+
+                ref var item = ref mref<StructComponentsItem<T>>((void*)this.list[i]);
                 item.Validate(entityId);
 
             }
@@ -134,6 +157,7 @@ namespace ME.ECSBurst {
         public bool Remove<T>(int entityId) where T : struct {
 
             var id = WorldUtilities.GetAllComponentTypeId<T>();
+            this.Validate<T>(entityId);
             var ptr = this.list[id];
             ref var item = ref mref<StructComponentsItem<T>>((void*)ptr);
             return item.Remove(entityId);
@@ -143,6 +167,7 @@ namespace ME.ECSBurst {
         public bool Has<T>(int entityId) where T : struct {
 
             var id = WorldUtilities.GetAllComponentTypeId<T>();
+            this.Validate<T>(entityId);
             var ptr = this.list[id];
             ref var item = ref mref<StructComponentsItem<T>>((void*)ptr);
             return item.Has(entityId);
@@ -152,6 +177,7 @@ namespace ME.ECSBurst {
         public void Set<T>(int entityId, T data) where T : struct {
 
             var id = WorldUtilities.GetAllComponentTypeId<T>();
+            this.Validate<T>(entityId);
             var ptr = this.list[id];
             ref var item = ref mref<StructComponentsItem<T>>((void*)ptr);
             item.Set(entityId, data);
@@ -161,6 +187,7 @@ namespace ME.ECSBurst {
         public ref T Get<T>(int entityId) where T : struct {
             
             var id = WorldUtilities.GetAllComponentTypeId<T>();
+            this.Validate<T>(entityId);
             var ptr = this.list[id];
             ref var item = ref mref<StructComponentsItem<T>>((void*)ptr);
             return ref item.Get(entityId);
@@ -211,12 +238,18 @@ namespace ME.ECSBurst {
 
         }
         
+        /*public void Validate<T>(int entityId) where T : struct, IComponentBase {
+
+            this.components->Validate<T>(entityId);
+
+        }*/
+
         public void Validate<T>() where T : struct, IComponentBase {
 
             this.components->Validate<T>();
 
         }
-        
+
         public Filter AddFilter(ref Filter filter) {
             
             return this.filters->Add(ref filter);
@@ -231,7 +264,9 @@ namespace ME.ECSBurst {
             if (willNew == true) {
 
                 this.storage->archetypes.Validate(in entity);
-                this.components->Validate(entity.id);
+                //this.components->Validate<Name>(entity.id);
+                //this.components->Validate(entity.id);
+                this.filters->OnAfterEntityCreate(in entity);
 
             }
             

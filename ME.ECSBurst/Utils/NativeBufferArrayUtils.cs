@@ -222,6 +222,7 @@ namespace ME.ECSBurst {
             var newArr = PoolArrayNative<T>.Spawn(newLength);
             var copyArr = newArr.arr;
             ArrayUtils.Copy(arr.arr, ref copyArr, arr.Length);
+            ArrayUtils.Clear(copyArr, arr.Length, newLength - arr.Length);
             arr = new NativeBufferArray<T>(copyArr, arr.Length);
             if (arr != newArr) PoolArrayNative<T>.Recycle(ref arr);
             arr = newArr;

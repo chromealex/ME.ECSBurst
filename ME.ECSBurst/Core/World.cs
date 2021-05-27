@@ -31,6 +31,12 @@ namespace ME.ECSBurst {
 
     public unsafe partial struct World {
 
+        /*public void Validate<T>(int entityId) where T : struct, IComponentBase {
+
+            this.currentState->Validate<T>(entityId);
+
+        }*/
+
         public void Validate<T>() where T : struct, IComponentBase {
 
             this.currentState->Validate<T>();
@@ -118,9 +124,7 @@ namespace ME.ECSBurst {
                 [NativeDisableUnsafePtrRestriction]
                 public void* system;
                 [NativeDisableUnsafePtrRestriction]
-                public void* job;
-                [NativeDisableUnsafePtrRestriction]
-                public void* jobData;
+                public Job* job;
 
             }
 
@@ -218,7 +222,6 @@ namespace ME.ECSBurst {
 
                         ref var data = ref this.advanceTick.GetRef(i);
                         free(ref data.job);
-                        free(ref data.jobData);
 
                     }
 
@@ -247,8 +250,7 @@ namespace ME.ECSBurst {
                     func = Burst<T>.cache,
                     system = sysData.system,
                 };
-                var ptr = pnew(ref job);
-                sysData.job = ptr;
+                sysData.job = tnew(ref job);
                 return mainData.system;
 
             }
@@ -288,11 +290,7 @@ namespace ME.ECSBurst {
                     for (int i = 0, cnt = this.advanceTick.Length; i < cnt; ++i) {
 
                         var data = this.advanceTick[i];
-                        ref var job = ref mref<Job>(data.job);
-                        job.Execute();
-                        //var p = new Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobScheduleParameters(data.job, (System.IntPtr)data.jobData, default, Unity.Jobs.LowLevel.Unsafe.ScheduleMode.Run);
-                        //var handle = Unity.Jobs.LowLevel.Unsafe.JobsUtility.Schedule(ref p);
-                        //handle.Complete();
+                        data.job->Execute();
 
                     }
 
@@ -370,7 +368,15 @@ namespace ME.ECSBurst {
 
         }
 
+        public void AddSystem<T>(T system) where T : struct, ISystem, IOnCreate {
+
+            system.OnCreate();
+            
+        }
+
         public void AddSystemAdvanceTick<T>(T system) where T : struct, ISystem, IAdvanceTick {
+
+            Burst<T>.Prewarm();
 
             var sysPtr = this.systems->AddAdvanceTick(system);
             this.Create(system, sysPtr);

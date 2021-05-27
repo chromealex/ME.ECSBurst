@@ -64,6 +64,16 @@ namespace ME.ECSBurst {
 
         }
 
+        public void OnAfterEntityCreate(in Entity entity) {
+
+            for (int i = 0; i < this.filters.Length; ++i) {
+                
+                this.filters.GetRef(i).OnEntityCreate(in entity);
+                
+            }
+
+        }
+
         public void OnBeforeEntityDestroy(in Entity entity) {
 
             for (int i = 0; i < this.filters.Length; ++i) {
@@ -183,6 +193,12 @@ namespace ME.ECSBurst {
 
         }
 
+        internal void OnEntityCreate(in Entity entity) {
+
+            ArrayUtils.Resize(entity.id, ref this.entities);
+
+        }
+
         internal void RemoveEntity(in Entity entity) {
             
             this.entities[entity.id] = 0;
@@ -193,6 +209,8 @@ namespace ME.ECSBurst {
         #region Public API
         public Filter With<T>() {
             
+            WorldUtilities.UpdateComponentTypeId<T>();
+
             this.contains.Add<T>();
             return this;
             
@@ -200,6 +218,8 @@ namespace ME.ECSBurst {
 
         public Filter Without<T>() {
             
+            WorldUtilities.UpdateComponentTypeId<T>();
+
             this.notContains.Add<T>();
             return this;
             

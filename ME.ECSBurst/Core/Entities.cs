@@ -13,10 +13,24 @@ namespace ME.ECSBurst {
     #endif
     public readonly struct Entity {
 
+        public static readonly Entity Empty = new Entity(0, 0);
+        
         public readonly int id;
         public readonly ushort generation;
 
-        public Entity(int id, ushort generation) {
+        public Entity(string name) {
+            
+            var entity = Worlds.currentWorld.AddEntity();
+            entity.Set(new Name() {
+                value = name,
+            });
+
+            this.id = entity.id;
+            this.generation = entity.generation;
+
+        }
+        
+        internal Entity(int id, ushort generation) {
 
             this.id = id;
             this.generation = generation;
@@ -38,31 +52,31 @@ namespace ME.ECSBurst {
     #endif
     public static unsafe class EntitiesAPI {
 
-        public static T Get<T>(this Entity entity) where T : struct, IComponentBase {
+        public static ref T Get<T>(this in Entity entity) where T : struct, IComponentBase {
 
             var world = mref<World>((void*)Worlds.currentInternalWorld.Data);
-            return world.Get<T>(entity);
+            return ref world.Get<T>(in entity);
 
         }
 
-        public static T Read<T>(this Entity entity) where T : struct, IComponentBase {
+        public static ref readonly T Read<T>(this in Entity entity) where T : struct, IComponentBase {
 
             var world = mref<World>((void*)Worlds.currentInternalWorld.Data);
-            return world.Get<T>(entity);
+            return ref world.Read<T>(in entity);
 
         }
 
-        public static bool Remove<T>(this Entity entity) where T : struct, IComponentBase {
+        public static bool Remove<T>(this in Entity entity) where T : struct, IComponentBase {
 
             var world = mref<World>((void*)Worlds.currentInternalWorld.Data);
-            return world.Remove<T>(entity);
+            return world.Remove<T>(in entity);
 
         }
 
-        public static void Set<T>(this Entity entity, T data) where T : struct, IComponentBase {
+        public static void Set<T>(this in Entity entity, T data) where T : struct, IComponentBase {
 
             var world = mref<World>((void*)Worlds.currentInternalWorld.Data);
-            world.Set<T>(entity, data);
+            world.Set<T>(in entity, data);
 
         }
 
