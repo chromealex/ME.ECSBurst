@@ -97,45 +97,26 @@ namespace ME.ECSBurst {
 
         public void RemoveAll(int entityId) {
 
+            var entId = ArrayUtils.AssumePositive(entityId);
             for (int i = 0; i < this.list.Length; ++i) {
                 
                 ref var item = ref mref<StructComponentsItemUnknown>((void*)this.list[i]);
-                item.dataExists[entityId] = false;
+                item.dataExists[entId] = false;
 
             }
             
         }
 
-        public void Validate(int entityId) {
-            
-            ArrayUtils.Resize(AllComponentTypesCounter.counter.Data, ref this.list);
-            
-            for (int i = 0; i < this.list.Length; ++i) {
-                
-                if (this.list[i] == System.IntPtr.Zero) {
-    
-                    UnityEngine.Debug.LogError(string.Format("Validation failed on index {0}. Do you forget to call Validate<T>?", i));
-                    
-                }
-                
-                UnityEngine.Debug.Log("Validate " + entityId + " :: " + i);
-                ref var item = ref mref<StructComponentsItemUnknown>((void*)this.list[i]);
-                item.Validate(entityId);
-                //UnsafeUtility.CopyStructureToPtr(ref item, (void*)this.list[i]);
-
-            }
-
-        }
-        
         public void Validate<T>(int entityId) where T : struct {
 
+            var entId = ArrayUtils.AssumePositive(entityId);
             var id = WorldUtilities.GetAllComponentTypeId<T>();
             ArrayUtils.Resize(id, ref this.list);
 
             for (int i = 0; i < this.list.Length; ++i) {
 
                 ref var item = ref mref<StructComponentsItem<T>>((void*)this.list[i]);
-                item.Validate(entityId);
+                item.Validate(entId);
 
             }
 
@@ -156,41 +137,45 @@ namespace ME.ECSBurst {
 
         public bool Remove<T>(int entityId) where T : struct {
 
+            var entId = ArrayUtils.AssumePositive(entityId);
             var id = WorldUtilities.GetAllComponentTypeId<T>();
-            this.Validate<T>(entityId);
+            this.Validate<T>(entId);
             var ptr = this.list[id];
             ref var item = ref mref<StructComponentsItem<T>>((void*)ptr);
-            return item.Remove(entityId);
+            return item.Remove(entId);
 
         }
 
         public bool Has<T>(int entityId) where T : struct {
 
+            var entId = ArrayUtils.AssumePositive(entityId);
             var id = WorldUtilities.GetAllComponentTypeId<T>();
-            this.Validate<T>(entityId);
+            this.Validate<T>(entId);
             var ptr = this.list[id];
             ref var item = ref mref<StructComponentsItem<T>>((void*)ptr);
-            return item.Has(entityId);
+            return item.Has(entId);
 
         }
 
         public void Set<T>(int entityId, T data) where T : struct {
 
+            var entId = ArrayUtils.AssumePositive(entityId);
             var id = WorldUtilities.GetAllComponentTypeId<T>();
-            this.Validate<T>(entityId);
+            this.Validate<T>(entId);
             var ptr = this.list[id];
             ref var item = ref mref<StructComponentsItem<T>>((void*)ptr);
-            item.Set(entityId, data);
+            item.Set(entId, data);
 
         }
 
         public ref T Get<T>(int entityId) where T : struct {
             
+            var entId = ArrayUtils.AssumePositive(entityId);
             var id = WorldUtilities.GetAllComponentTypeId<T>();
-            this.Validate<T>(entityId);
+            this.Validate<T>(entId);
             var ptr = this.list[id];
             ref var item = ref mref<StructComponentsItem<T>>((void*)ptr);
-            return ref item.Get(entityId);
+            return ref item.Get(entId);
 
         }
 

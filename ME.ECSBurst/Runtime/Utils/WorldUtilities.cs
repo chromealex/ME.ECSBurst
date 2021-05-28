@@ -137,7 +137,7 @@ namespace ME.ECSBurst {
         #endif
         public static int GetComponentTypeId<TComponent>() {
 
-            return ComponentTypes<TComponent>.typeId.Data;
+            return ArrayUtils.AssumePositive(ComponentTypes<TComponent>.typeId.Data);
 
         }
 
@@ -146,7 +146,7 @@ namespace ME.ECSBurst {
         #endif
         public static int GetAllComponentTypeId<TComponent>() {
 
-            return AllComponentTypes<TComponent>.typeId.Data;
+            return ArrayUtils.AssumePositive(AllComponentTypes<TComponent>.typeId.Data);
 
         }
 
@@ -161,7 +161,7 @@ namespace ME.ECSBurst {
 
             }
 
-            return AllSystemTypes<TComponent>.typeId.Data;
+            return ArrayUtils.AssumePositive(AllSystemTypes<TComponent>.typeId.Data);
 
         }
 
