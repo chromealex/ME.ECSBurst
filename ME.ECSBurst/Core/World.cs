@@ -23,6 +23,12 @@ namespace ME.ECSBurst {
 
     }
 
+    public static class WorldsCache {
+
+        public static System.Collections.Generic.Dictionary<int, World.Systems.SystemExecute> advanceTickDelegates = new System.Collections.Generic.Dictionary<int, World.Systems.SystemExecute>();
+
+    }
+
     public struct TimeData {
 
         public float deltaTime;
@@ -93,6 +99,16 @@ namespace ME.ECSBurst {
 
     }
 
+    public static class AAA {
+
+        public static World.Systems.SystemExecute GetDispose<T>(this T t) where T : struct, ISystem, IOnDispose {
+
+            return t.OnDispose;
+
+        }
+
+    }
+
     public unsafe partial struct World {
 
         public struct Info {
@@ -103,17 +119,16 @@ namespace ME.ECSBurst {
 
         public struct Systems {
 
-            internal delegate void SystemExecute();
+            public delegate void SystemExecute();
 
             public struct Job {
 
-                public Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobScheduleParameters func;
                 [NativeDisableUnsafePtrRestriction]
-                public void* system;
+                public Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobScheduleParameters job;
 
                 public void Execute() {
 
-                    Unity.Jobs.LowLevel.Unsafe.JobsUtility.Schedule(ref this.func).Complete();
+                    Unity.Jobs.LowLevel.Unsafe.JobsUtility.Schedule(ref this.job).Complete();
 
                 }
 
@@ -121,15 +136,20 @@ namespace ME.ECSBurst {
 
             internal struct SystemJobData {
 
+                public int id;
                 [NativeDisableUnsafePtrRestriction]
                 public void* system;
                 [NativeDisableUnsafePtrRestriction]
                 public Job* job;
+                [NativeDisableUnsafePtrRestriction]
+                public void* method;
+                public byte isBurst;
 
             }
 
             internal struct SystemData {
 
+                public int id;
                 [NativeDisableUnsafePtrRestriction]
                 public void* system;
                 [NativeDisableUnsafePtrRestriction]
@@ -153,8 +173,20 @@ namespace ME.ECSBurst {
                 
             }
 
-            private ref SystemData Add<T>(T system, ref NativeArrayBurst<SystemData> arr) where T : struct {
+            internal ref SystemData Add<T>(ref T system, ref NativeArrayBurst<SystemData> arr) where T : struct, ISystem {
 
+                var id = WorldUtilities.GetAllSystemTypeId<T>();
+                
+                for (int i = 0; i < arr.Length; ++i) {
+
+                    if (arr[i].id == id) {
+
+                        return ref arr[i];
+
+                    } 
+                    
+                }
+                
                 var size = UnsafeUtility.SizeOf<T>();
                 var addr = UnsafeUtility.AddressOf(ref system);
                 var buffer = pnew(ref system);
@@ -162,10 +194,13 @@ namespace ME.ECSBurst {
 
                 var sysData = new SystemData();
                 sysData.system = buffer;
+                sysData.id = id;
                 
                 var idx = arr.Length;
                 ArrayUtils.Resize(idx, ref arr);
                 arr[idx] = sysData;
+                
+                system = mref<T>(sysData.system);
                 
                 return ref arr.GetRef(idx);
 
@@ -207,6 +242,26 @@ namespace ME.ECSBurst {
 
             }
 
+            private static class ExecJob<T> where T : struct, IAdvanceTick {
+
+                public static System.IntPtr CreateReflectionData() {
+
+                    return Unity.Jobs.LowLevel.Unsafe.JobsUtility.CreateJobReflectionData(typeof(T), (ExecuteJobDelegate)ExecJob<T>.ExecuteJob);
+
+                }
+
+                private delegate void ExecuteJobDelegate(ref T jobData, System.IntPtr additionalData, System.IntPtr bufferRangePatchData,
+                                                          ref Unity.Jobs.LowLevel.Unsafe.JobRanges ranges, int jobIndex);
+
+                private static void ExecuteJob(ref T jobData, System.IntPtr additionalData,
+                                               System.IntPtr bufferRangePatchData, ref Unity.Jobs.LowLevel.Unsafe.JobRanges ranges, int jobIndex) {
+
+                    jobData.AdvanceTick();
+
+                }
+
+            }
+
             #region Public API
             public void Dispose() {
 
@@ -241,63 +296,85 @@ namespace ME.ECSBurst {
 
             }
 
-            public static class ExecJob<T> where T : IAdvanceTick {
+            public void* AddDispose<T>(T system) where T : struct, ISystem {
 
-                public static System.IntPtr CreateReflectionData() {
-
-                    return Unity.Jobs.LowLevel.Unsafe.JobsUtility.CreateJobReflectionData(typeof(T), (ExecuteJobDelegate)ExecuteJob);
-
-                }
-
-                internal delegate void ExecuteJobDelegate(ref T jobData, System.IntPtr additionalData, System.IntPtr bufferRangePatchData,
-                                                          ref Unity.Jobs.LowLevel.Unsafe.JobRanges ranges, int jobIndex);
-
-                private static void ExecuteJob(ref T jobData, System.IntPtr additionalData,
-                                               System.IntPtr bufferRangePatchData, ref Unity.Jobs.LowLevel.Unsafe.JobRanges ranges, int jobIndex) {
-
-                    jobData.AdvanceTick();
-
-                }
+                ref var mainData = ref this.Add(ref system, ref this.allSystems);
+                
+                var methodInfo = typeof(T).GetMethod("OnDispose", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
+                
+                ref var sysData = ref this.Add(mainData.system, ref this.disposable);
+                sysData.method = (void*)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(del);
+                return mainData.system;
 
             }
 
             public void* AddAdvanceTick<T>(T system) where T : struct, ISystem, IAdvanceTick {
 
-                ref var mainData = ref this.Add(system, ref this.allSystems);
+                ref var mainData = ref this.Add(ref system, ref this.allSystems);
                 
+                var burstCompile = typeof(T).GetCustomAttributes(typeof(BurstCompileAttribute), false);
+                var isBurstSystem = (burstCompile.Length > 0);
+
                 ref var sysData = ref this.Add(mainData.system, ref this.advanceTick);
-                var jobData = ExecJob<T>.CreateReflectionData();
-                var p = new Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobScheduleParameters(sysData.system, jobData, default, Unity.Jobs.LowLevel.Unsafe.ScheduleMode.Run);
-                var job = new Job() {
-                    func = p,
-                    system = sysData.system,
-                };
-                sysData.job = tnew(ref job);
+                sysData.id = mainData.id;
+                if (isBurstSystem == true) {
+
+                    var jobData = ExecJob<T>.CreateReflectionData();
+                    var p = new Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobScheduleParameters(mainData.system, jobData, default, Unity.Jobs.LowLevel.Unsafe.ScheduleMode.Run);
+                    var job = new Job() {
+                        job = p,
+                    };
+                    sysData.job = tnew(ref job);
+                    sysData.isBurst = 1;
+
+                } else {
+
+                    system = mref<T>(sysData.system);
+                    
+                    var methodInfo = typeof(T).GetMethod("AdvanceTick", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                    var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
+
+                    sysData.method = (void*)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(del);
+                    sysData.isBurst = 0;
+                    
+                    var ptr = (System.IntPtr)sysData.method;
+                    var m = System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<SystemExecute>(ptr);
+                    WorldsCache.advanceTickDelegates.Add(mainData.id, m);
+
+                }
+
                 return mainData.system;
 
             }
 
-            public void* AddVisual<T>(T system) where T : struct, ISystem, IUpdateVisual {
+            public void* AddVisual<T>(T system) where T : struct, ISystem {
 
-                ref var mainData = ref this.Add(system, ref this.allSystems);
+                ref var mainData = ref this.Add(ref system, ref this.allSystems);
                 
+                var methodInfo = typeof(T).GetMethod("UpdateVisual", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
+
                 ref var sysData = ref this.Add(mainData.system, ref this.updateVisual);
-                sysData.method = (void*)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate((SystemExecute)system.UpdateVisual);
+                sysData.method = (void*)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(del);
                 return mainData.system;
 
             }
 
-            public void* AddInput<T>(T system) where T : struct, ISystem, IUpdateInput {
+            public void* AddInput<T>(T system) where T : struct, ISystem {
 
-                ref var mainData = ref this.Add(system, ref this.allSystems);
+                ref var mainData = ref this.Add(ref system, ref this.allSystems);
                 
+                var methodInfo = typeof(T).GetMethod("UpdateInput", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
+
                 ref var sysData = ref this.Add(mainData.system, ref this.updateVisual);
-                sysData.method = (void*)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate((SystemExecute)system.UpdateInput);
+                sysData.method = (void*)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(del);
                 return mainData.system;
                 
             }
 
-            public void Run(void* world, float dt) {
+            public void Run(World* world, float dt) {
 
                 if (this.updateInput.IsCreated == true) {
 
@@ -311,7 +388,19 @@ namespace ME.ECSBurst {
                     Worlds.time.Data.deltaTime = 0.033f;
                     for (int i = 0, cnt = this.advanceTick.Length; i < cnt; ++i) {
 
-                        this.advanceTick[i].job->Execute();
+                        if (this.advanceTick[i].isBurst == 1) {
+
+                            this.advanceTick[i].job->Execute();
+
+                        } else {
+
+                            if (WorldsCache.advanceTickDelegates.TryGetValue(this.advanceTick[i].id, out var del) == true) {
+                                
+                                del.Invoke();
+                                
+                            }
+                            
+                        }
 
                     }
 
@@ -339,6 +428,7 @@ namespace ME.ECSBurst {
         public State* currentState;
         
         public Info info;
+        [NativeDisableUnsafePtrRestriction]
         internal Systems* systems;
         
         public World(string name, int entitiesCapacity = 100) {
@@ -357,18 +447,6 @@ namespace ME.ECSBurst {
 
         }
         
-        private void Create<T>(T source, void* sysPtr) where T : struct, ISystem {
-            
-            if (source is IOnCreate onCreate) {
-
-                onCreate.OnCreate();
-                var s = (T)onCreate;
-                UnsafeUtility.CopyStructureToPtr(ref s, sysPtr);
-
-            }
-
-        }
-
         #region Public API
         public void Dispose() {
 
@@ -389,32 +467,54 @@ namespace ME.ECSBurst {
 
         }
 
-        public void AddSystem<T>(T system) where T : struct, ISystem, IOnCreate {
+        public abstract class Base<T> {
 
-            system.OnCreate();
-            
-        }
-
-        public void AddSystemAdvanceTick<T>(T system) where T : struct, ISystem, IAdvanceTick {
-
-            Burst<T>.Prewarm();
-
-            var sysPtr = this.systems->AddAdvanceTick(system);
-            this.Create(system, sysPtr);
-            
-        }
-        
-        public void AddSystemVisual<T>(T system) where T : struct, ISystem, IUpdateVisual {
-
-            var sysPtr = this.systems->AddVisual(system);
-            this.Create(system, sysPtr);
+            public abstract void* Call(Systems* systems, ref T system);
 
         }
-        
-        public void AddSystemInput<T>(T system) where T : struct, ISystem, IUpdateInput {
 
-            var sysPtr = this.systems->AddInput(system);
-            this.Create(system, sysPtr);
+        public sealed class CallAdvanceTick<T> : Base<T> where T : struct, IAdvanceTick {
+
+            public override void* Call(Systems* systems, ref T system) {
+
+                var ptr = systems->AddAdvanceTick(system);
+                system = mref<T>(ptr);
+                return ptr;
+
+            }
+
+        }
+
+        public T AddSystem<T>(T system) where T : struct, ISystem {
+
+            void* ptr = null;
+            if (system is IOnCreate sysCreate) {
+
+                var mainData = this.systems->Add(ref system, ref this.systems->allSystems);
+                ptr = mainData.system;
+                sysCreate.OnCreate();
+                var sys = (T)sysCreate;
+                UnsafeUtility.CopyStructureToPtr(ref sys, ptr);
+                
+            }
+            if (system is IOnDispose) {
+                ptr = this.systems->AddDispose(system);
+                system = mref<T>(ptr);
+            }
+            if (system is IAdvanceTick) {
+                var adder = (Base<T>)System.Activator.CreateInstance(typeof(CallAdvanceTick<>).MakeGenericType(typeof(T)));
+                ptr = adder.Call(this.systems, ref system);
+            }
+            if (system is IUpdateVisual) {
+                ptr = this.systems->AddVisual(system);
+                system = mref<T>(ptr);
+            }
+            if (system is IUpdateInput) {
+                ptr = this.systems->AddInput(system);
+                system = mref<T>(ptr);
+            }
+
+            return ptr != null ? mref<T>(ptr) : system;
 
         }
         #endregion

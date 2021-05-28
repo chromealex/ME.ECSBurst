@@ -1076,6 +1076,12 @@ namespace ME.ECSBurst {
             }
         }
 
+        public int GetMaxId() {
+
+            return this.entityId;
+
+        }
+
         #if INLINE_METHODS
         [System.Runtime.CompilerServices.MethodImplAttribute(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         #endif

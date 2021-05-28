@@ -3,6 +3,20 @@ namespace ME.ECSBurst {
     
     using Unity.Burst;
 
+    public struct AllSystemTypes<TComponent> {
+
+        public static readonly SharedStatic<int> typeId = SharedStatic<int>.GetOrCreate<AllSystemTypes<TComponent>, TComponentKey>();
+        public class TComponentKey {}
+
+    }
+
+    public struct AllSystemTypesCounter {
+
+        public static readonly SharedStatic<int> counter = SharedStatic<int>.GetOrCreate<AllSystemTypesCounter, AllSystemTypesCounterKey>();
+        public class AllSystemTypesCounterKey {}
+
+    }
+
     public struct AllComponentTypes<TComponent> {
 
         public static readonly SharedStatic<int> typeId = SharedStatic<int>.GetOrCreate<AllComponentTypes<TComponent>, TComponentKey>();
@@ -133,6 +147,21 @@ namespace ME.ECSBurst {
         public static int GetAllComponentTypeId<TComponent>() {
 
             return AllComponentTypes<TComponent>.typeId.Data;
+
+        }
+
+        #if INLINE_METHODS
+        [System.Runtime.CompilerServices.MethodImplAttribute(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        #endif
+        public static int GetAllSystemTypeId<TComponent>() {
+
+            if (AllSystemTypes<TComponent>.typeId.Data <= 0) {
+
+                AllSystemTypes<TComponent>.typeId.Data = ++AllSystemTypesCounter.counter.Data;
+
+            }
+
+            return AllSystemTypes<TComponent>.typeId.Data;
 
         }
 

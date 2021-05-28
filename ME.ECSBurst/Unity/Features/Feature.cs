@@ -8,24 +8,6 @@ namespace ME.ECSBurst {
             
         }
 
-        public void AddSystemAdvanceTick<T>() where T : struct, ISystem, IAdvanceTick {
-            
-            Worlds.currentWorld.AddSystemAdvanceTick(new T());
-            
-        }
-
-        public void AddSystemVisual<T>() where T : struct, ISystem, IUpdateVisual {
-            
-            Worlds.currentWorld.AddSystemVisual(new T());
-            
-        }
-
-        public void AddSystemInput<T>() where T : struct, ISystem, IUpdateInput {
-            
-            Worlds.currentWorld.AddSystemInput(new T());
-            
-        }
-
         public abstract void Initialize();
 
         public abstract void DeInitialize();

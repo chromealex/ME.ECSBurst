@@ -26,7 +26,7 @@ namespace ME.ECSBurst.Tests {
 
                 this.world = Worlds.currentWorld;
                 UnityEngine.Debug.Log("OnCreate, world: " + this.world);
-                Filter.Create().With<Item>().Without<Item2>().Push(ref this.filter);
+                Filter.With<Item>().Without<Item2>().Push(ref this.filter);
 
             }
             
@@ -84,7 +84,7 @@ namespace ME.ECSBurst.Tests {
             //w.currentState.Validate<Item>();
             // TODO: Generator job: Validate per component
             w.Validate<Item>();
-            w.AddSystemAdvanceTick(new TestSystem());
+            w.AddSystem(new TestSystem());
             w.Update(0.1f);
             
             // Test filter

@@ -25,7 +25,7 @@ namespace ME.ECSBurst {
 
         }
         
-        public Filter Add(ref Filter filter) {
+        public unsafe Filter Add(ref Filter filter) {
 
             for (int i = 0; i < this.filters.Length; ++i) {
 
@@ -40,6 +40,17 @@ namespace ME.ECSBurst {
             filter.id = this.filters.Length;
             filter.entities = PoolArrayNative<byte>.Spawn(10);
             this.filters.Add(filter);
+            
+            // For each entity in world - create
+            var entities = filter.storage->GetAlive();
+            filter.Validate(filter.storage->GetMaxId());
+            for (int i = 0, cnt = entities.Length; i < cnt; ++i) {
+
+                var ent = filter.storage->cache[entities[i]];
+                filter.UpdateEntity(in ent);
+
+            }
+            
             return filter;
 
         }
@@ -154,6 +165,8 @@ namespace ME.ECSBurst {
         public Archetype contains;
         public Archetype notContains;
 
+        public int Capacity => this.entities.Length;
+        
         #region Internal API
         internal void AddEntityCheckComponent<T>(in Entity entity) {
 
@@ -199,80 +212,136 @@ namespace ME.ECSBurst {
 
         }
 
+        internal void Validate(int entityId) {
+
+            ArrayUtils.Resize(entityId, ref this.entities);
+
+        }
+
+        internal void UpdateEntity(in Entity entity) {
+            
+            var arch = this.storage->archetypes.Get(in entity);
+            if (arch.Has(this.contains) == true &&
+                arch.HasNot(this.notContains) == true) {
+
+                this.entities[entity.id] = 1;
+
+            }
+
+        }
+
         internal void RemoveEntity(in Entity entity) {
             
             this.entities[entity.id] = 0;
             
         }
-        #endregion
+        
+        internal Filter Set(FilterEntry entry) {
 
-        #region Public API
-        public Filter With<T>() {
-            
-            WorldUtilities.UpdateComponentTypeId<T>();
-
-            this.contains.Add<T>();
+            this.contains = entry.contains;
+            this.notContains = entry.notContains;
             return this;
-            
+
         }
+        
+        internal Filter Push() {
 
-        public Filter Without<T>() {
-            
-            WorldUtilities.UpdateComponentTypeId<T>();
-
-            this.notContains.Add<T>();
-            return this;
-            
-        }
-
-        public Enumerator GetEnumerator() {
-            
-            return new Enumerator(this);
-            
-        }
-
-        public Filter Push() {
-            
             Filter _ = default;
             return this.Push(ref Worlds.currentWorld, ref _);
             
         }
 
-        public Filter Push(ref World world) {
+        internal Filter Push(ref World world) {
 
             Filter _ = default;
             return this.Push(ref world, ref _);
             
         }
 
-        public Filter Push(ref Filter variable) {
+        internal Filter Push(ref Filter variable) {
             
             return this.Push(ref Worlds.currentWorld, ref variable);
             
         }
 
-        public Filter Push(ref World world, ref Filter variable) {
+        internal Filter Push(ref World world, ref Filter variable) {
 
+            Filter.current = FilterEntry.Empty;
             this.storage = world.currentState->storage;
             variable = world.currentState->AddFilter(ref this);
             return variable;
 
         }
         
-        public static Filter Create() {
-            
-            var filter = new Filter();
-            return filter;
-
-        }
-        #endregion
-
-        public bool IsEquals(in Filter filter) {
+        internal bool IsEquals(in Filter filter) {
 
             return this.contains == filter.contains &&
                    this.notContains == filter.notContains;
+            
+        }
+        #endregion
+        
+        #region Public API
+        public Enumerator GetEnumerator() {
+            
+            return new Enumerator(this);
+            
+        }
+
+        public struct FilterEntry {
+            
+            public static FilterEntry Empty = new FilterEntry() { isCreated = false };
+            public static FilterEntry New = new FilterEntry() { isCreated = true };
+
+            public bool isCreated;
+            public Archetype contains;
+            public Archetype notContains;
+
+            public FilterEntry With<T>() {
+                
+                WorldUtilities.UpdateComponentTypeId<T>();
+                Filter.current.contains.Add<T>();
+                return this;
+
+            }
+
+            public FilterEntry Without<T>() {
+                
+                WorldUtilities.UpdateComponentTypeId<T>();
+                Filter.current.notContains.Add<T>();
+                return this;
+
+            }
+
+            public Filter Push() {
+
+                return new Filter().Set(this).Push();
+
+            }
+
+            public Filter Push(ref Filter filter) {
+
+                return new Filter().Set(this).Push(ref filter);
+
+            }
 
         }
+
+        private static FilterEntry current;
+        public static FilterEntry With<T>() {
+            
+            if (Filter.current.isCreated == false) Filter.current = FilterEntry.New;
+            return Filter.current.With<T>();
+            
+        }
+
+        public static FilterEntry Without<T>() {
+            
+            if (Filter.current.isCreated == false) Filter.current = FilterEntry.New;
+            return Filter.current.Without<T>();
+            
+        }
+        #endregion
 
     }
 
