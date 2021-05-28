@@ -107,14 +107,14 @@ namespace ME.ECSBurst {
 
             public struct Job {
 
-                public FunctionPointer<FunctionPointerDelegate> func;
+                public Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobScheduleParameters func;
                 [NativeDisableUnsafePtrRestriction]
                 public void* system;
 
                 public void Execute() {
-                    
-                    this.func.Invoke(ref this.system);
-                    
+
+                    Unity.Jobs.LowLevel.Unsafe.JobsUtility.Schedule(ref this.func).Complete();
+
                 }
 
             }
@@ -240,14 +240,36 @@ namespace ME.ECSBurst {
                 this.updateInput.Dispose();
 
             }
-            
+
+            public static class ExecJob<T> where T : IAdvanceTick {
+
+                public static System.IntPtr CreateReflectionData() {
+
+                    return Unity.Jobs.LowLevel.Unsafe.JobsUtility.CreateJobReflectionData(typeof(T), (ExecuteJobDelegate)ExecuteJob);
+
+                }
+
+                internal delegate void ExecuteJobDelegate(ref T jobData, System.IntPtr additionalData, System.IntPtr bufferRangePatchData,
+                                                          ref Unity.Jobs.LowLevel.Unsafe.JobRanges ranges, int jobIndex);
+
+                private static void ExecuteJob(ref T jobData, System.IntPtr additionalData,
+                                               System.IntPtr bufferRangePatchData, ref Unity.Jobs.LowLevel.Unsafe.JobRanges ranges, int jobIndex) {
+
+                    jobData.AdvanceTick();
+
+                }
+
+            }
+
             public void* AddAdvanceTick<T>(T system) where T : struct, ISystem, IAdvanceTick {
 
                 ref var mainData = ref this.Add(system, ref this.allSystems);
                 
                 ref var sysData = ref this.Add(mainData.system, ref this.advanceTick);
+                var jobData = ExecJob<T>.CreateReflectionData();
+                var p = new Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobScheduleParameters(sysData.system, jobData, default, Unity.Jobs.LowLevel.Unsafe.ScheduleMode.Run);
                 var job = new Job() {
-                    func = Burst<T>.cache,
+                    func = p,
                     system = sysData.system,
                 };
                 sysData.job = tnew(ref job);
@@ -289,8 +311,7 @@ namespace ME.ECSBurst {
                     Worlds.time.Data.deltaTime = 0.033f;
                     for (int i = 0, cnt = this.advanceTick.Length; i < cnt; ++i) {
 
-                        var data = this.advanceTick[i];
-                        data.job->Execute();
+                        this.advanceTick[i].job->Execute();
 
                     }
 

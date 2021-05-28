@@ -16,6 +16,7 @@ namespace ME.ECSBurst.Tests {
 
         }
 
+        [Unity.Burst.BurstCompileAttribute]
         public struct TestSystem : IOnCreate, IAdvanceTick {
 
             public Filter filter;
