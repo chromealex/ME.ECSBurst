@@ -61,7 +61,7 @@ namespace ME.ECSBurst {
 
     public struct ComponentTypesCounter {
 
-        public static int counter = -1;
+        public static int counter = 0;
 
     }
 
@@ -87,7 +87,7 @@ namespace ME.ECSBurst {
 
             ComponentTypesRegistry.reset += () => {
 
-                AllComponentTypes<TComponent>.typeId.Data = -1;
+                AllComponentTypes<TComponent>.typeId.Data = 0;
                 
             };
 
@@ -100,7 +100,7 @@ namespace ME.ECSBurst {
 
             ComponentTypesRegistry.reset += () => {
 
-                ComponentTypes<TComponent>.typeId.Data = -1;
+                ComponentTypes<TComponent>.typeId.Data = 0;
                 
             };
 
@@ -111,7 +111,7 @@ namespace ME.ECSBurst {
         #endif
         public static void UpdateAllComponentTypeId<TComponent>() where TComponent : struct {
 
-            if (AllComponentTypes<TComponent>.typeId.Data < 0) {
+            if (AllComponentTypes<TComponent>.typeId.Data <= 0) {
 
                 WorldUtilities.CacheAllComponentTypeId<TComponent>();
 
@@ -124,7 +124,7 @@ namespace ME.ECSBurst {
         #endif
         public static void UpdateComponentTypeId<TComponent>() {
 
-            if (ComponentTypes<TComponent>.typeId.Data < 0) {
+            if (ComponentTypes<TComponent>.typeId.Data <= 0) {
 
                 WorldUtilities.CacheComponentTypeId<TComponent>();
 

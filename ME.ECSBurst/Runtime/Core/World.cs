@@ -99,16 +99,6 @@ namespace ME.ECSBurst {
 
     }
 
-    public static class AAA {
-
-        public static World.Systems.SystemExecute GetDispose<T>(this T t) where T : struct, ISystem, IOnDispose {
-
-            return t.OnDispose;
-
-        }
-
-    }
-
     public unsafe partial struct World {
 
         public struct Info {
@@ -143,6 +133,9 @@ namespace ME.ECSBurst {
                 public Job* job;
                 [NativeDisableUnsafePtrRestriction]
                 public void* method;
+                [NativeDisableUnsafePtrRestriction]
+                public FunctionPointer<FunctionPointerDelegate> burstMethod;
+                public byte isJob;
                 public byte isBurst;
 
             }
@@ -242,7 +235,7 @@ namespace ME.ECSBurst {
 
             }
 
-            private static class ExecJob<T> where T : struct, IAdvanceTick {
+            private static class ExecJob<T> where T : struct, IAdvanceTickJob {
 
                 public static System.IntPtr CreateReflectionData() {
 
@@ -300,6 +293,8 @@ namespace ME.ECSBurst {
 
                 ref var mainData = ref this.Add(ref system, ref this.allSystems);
                 
+                system = mref<T>(mainData.system);
+
                 var methodInfo = typeof(T).GetMethod("OnDispose", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
                 var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
                 
@@ -318,6 +313,45 @@ namespace ME.ECSBurst {
 
                 ref var sysData = ref this.Add(mainData.system, ref this.advanceTick);
                 sysData.id = mainData.id;
+                sysData.isJob = 0;
+                
+                if (isBurstSystem == true) {
+
+                    sysData.isBurst = 1;
+                    
+                    Burst<T>.Prewarm();
+                    sysData.burstMethod = Burst<T>.cache;
+
+                } else {
+
+                    sysData.isBurst = 0;
+                    
+                    system = mref<T>(sysData.system);
+
+                    var methodInfo = typeof(T).GetMethod("AdvanceTick", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                    var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
+
+                    sysData.method = (void*)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(del);
+
+                    var ptr = (System.IntPtr)sysData.method;
+                    var m = System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<SystemExecute>(ptr);
+                    WorldsCache.advanceTickDelegates.Add(mainData.id, m);
+
+                }
+
+                return mainData.system;
+
+            }
+
+            public void* AddAdvanceTickJob<T>(T system) where T : struct, ISystem, IAdvanceTickJob {
+
+                ref var mainData = ref this.Add(ref system, ref this.allSystems);
+                
+                var burstCompile = typeof(T).GetCustomAttributes(typeof(BurstCompileAttribute), false);
+                var isBurstSystem = (burstCompile.Length > 0);
+
+                ref var sysData = ref this.Add(mainData.system, ref this.advanceTick);
+                sysData.id = mainData.id;
                 if (isBurstSystem == true) {
 
                     var jobData = ExecJob<T>.CreateReflectionData();
@@ -326,6 +360,7 @@ namespace ME.ECSBurst {
                         job = p,
                     };
                     sysData.job = tnew(ref job);
+                    sysData.isJob = 1;
                     sysData.isBurst = 1;
 
                 } else {
@@ -336,6 +371,7 @@ namespace ME.ECSBurst {
                     var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
 
                     sysData.method = (void*)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(del);
+                    sysData.isJob = 1;
                     sysData.isBurst = 0;
                     
                     var ptr = (System.IntPtr)sysData.method;
@@ -352,6 +388,8 @@ namespace ME.ECSBurst {
 
                 ref var mainData = ref this.Add(ref system, ref this.allSystems);
                 
+                system = mref<T>(mainData.system);
+
                 var methodInfo = typeof(T).GetMethod("UpdateVisual", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
                 var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
 
@@ -365,6 +403,8 @@ namespace ME.ECSBurst {
 
                 ref var mainData = ref this.Add(ref system, ref this.allSystems);
                 
+                system = mref<T>(mainData.system);
+
                 var methodInfo = typeof(T).GetMethod("UpdateInput", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
                 var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
 
@@ -388,18 +428,27 @@ namespace ME.ECSBurst {
                     Worlds.time.Data.deltaTime = 0.033f;
                     for (int i = 0, cnt = this.advanceTick.Length; i < cnt; ++i) {
 
-                        if (this.advanceTick[i].isBurst == 1) {
-
-                            this.advanceTick[i].job->Execute();
-
-                        } else {
-
-                            if (WorldsCache.advanceTickDelegates.TryGetValue(this.advanceTick[i].id, out var del) == true) {
-                                
-                                del.Invoke();
-                                
-                            }
+                        var task = this.advanceTick[i];
+                        if (task.isBurst == 0) {
                             
+                            if (WorldsCache.advanceTickDelegates.TryGetValue(this.advanceTick[i].id, out var del) == true) {
+
+                                del.Invoke();
+
+                            }
+
+                            continue;
+                            
+                        }
+
+                        if (task.isJob == 1) {
+
+                            task.job->Execute();
+    
+                        } else {
+                            
+                            task.burstMethod.Invoke(ref task.system);
+
                         }
 
                     }
@@ -418,6 +467,12 @@ namespace ME.ECSBurst {
 
         }
 
+        public struct ManagedData {
+
+            public System.Collections.Generic.List<Feature> features;
+
+        }
+        
         // Current world link
         [NativeDisableUnsafePtrRestriction]
         internal World* buffer;
@@ -430,8 +485,15 @@ namespace ME.ECSBurst {
         public Info info;
         [NativeDisableUnsafePtrRestriction]
         internal Systems* systems;
-        
+
+        [NativeDisableUnsafePtrRestriction]
+        internal void* managedData;
+
         public World(string name, int entitiesCapacity = 100) {
+
+            var mData = new ManagedData();
+            mData.features = new System.Collections.Generic.List<Feature>();
+            this.managedData = pnew(ref mData);
 
             this.resetState = State.Create(entitiesCapacity);
             this.currentState = State.Create(entitiesCapacity);
@@ -485,6 +547,18 @@ namespace ME.ECSBurst {
 
         }
 
+        public sealed class CallAdvanceTickJob<T> : Base<T> where T : struct, IAdvanceTickJob {
+
+            public override void* Call(Systems* systems, ref T system) {
+
+                var ptr = systems->AddAdvanceTickJob(system);
+                system = mref<T>(ptr);
+                return ptr;
+
+            }
+
+        }
+
         public T AddSystem<T>(T system) where T : struct, ISystem {
 
             void* ptr = null;
@@ -505,6 +579,10 @@ namespace ME.ECSBurst {
                 var adder = (Base<T>)System.Activator.CreateInstance(typeof(CallAdvanceTick<>).MakeGenericType(typeof(T)));
                 ptr = adder.Call(this.systems, ref system);
             }
+            if (system is IAdvanceTickJob) {
+                var adder = (Base<T>)System.Activator.CreateInstance(typeof(CallAdvanceTickJob<>).MakeGenericType(typeof(T)));
+                ptr = adder.Call(this.systems, ref system);
+            }
             if (system is IUpdateVisual) {
                 ptr = this.systems->AddVisual(system);
                 system = mref<T>(ptr);
@@ -515,6 +593,37 @@ namespace ME.ECSBurst {
             }
 
             return ptr != null ? mref<T>(ptr) : system;
+
+        }
+
+        public void AddFeature<T>(T feature) where T : Feature {
+
+            ref var mData = ref mref<ManagedData>(this.managedData);
+            mData.features.Add(feature);
+
+        }
+
+        public T GetFeature<T>(out T feature) where T : Feature {
+
+            feature = this.GetFeature<T>();
+            return feature;
+
+        }
+
+        public T GetFeature<T>() where T : Feature {
+
+            ref var mData = ref mref<ManagedData>(this.managedData);
+            foreach (var feature in mData.features) {
+
+                if (feature is T) {
+
+                    return (T)feature;
+
+                }
+                
+            }
+
+            return null;
 
         }
         #endregion
@@ -540,6 +649,12 @@ namespace ME.ECSBurst {
     }
     
     public interface IAdvanceTick : ISystem {
+
+        void AdvanceTick();
+
+    }
+
+    public interface IAdvanceTickJob : ISystem {
 
         void AdvanceTick();
 

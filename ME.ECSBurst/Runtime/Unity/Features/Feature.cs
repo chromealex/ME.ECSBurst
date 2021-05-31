@@ -23,6 +23,12 @@ namespace ME.ECSBurst {
 
             for (int i = 0, count = this.list.Length; i < count; ++i) {
                 
+                Worlds.currentWorld.AddFeature(this.list[i]);
+                
+            }
+
+            for (int i = 0, count = this.list.Length; i < count; ++i) {
+                
                 this.list[i].Initialize();
                 
             }

@@ -86,8 +86,10 @@ namespace ME.ECSBurst {
         public void Dispose() {
 
             for (int i = 0; i < this.list.Length; ++i) {
-                
-                ref var item = ref mref<StructComponentsItemUnknown>((void*)this.list[i]);
+
+                var ptr = (void*)this.list[i];
+                if (ptr == null) continue;
+                ref var item = ref mref<StructComponentsItemUnknown>(ptr);
                 item.Dispose();
 
             }
@@ -100,7 +102,9 @@ namespace ME.ECSBurst {
             var entId = ArrayUtils.AssumePositive(entityId);
             for (int i = 0; i < this.list.Length; ++i) {
                 
-                ref var item = ref mref<StructComponentsItemUnknown>((void*)this.list[i]);
+                var ptr = (void*)this.list[i];
+                if (ptr == null) continue;
+                ref var item = ref mref<StructComponentsItemUnknown>(ptr);
                 item.dataExists[entId] = false;
 
             }
@@ -115,7 +119,9 @@ namespace ME.ECSBurst {
 
             for (int i = 0; i < this.list.Length; ++i) {
 
-                ref var item = ref mref<StructComponentsItem<T>>((void*)this.list[i]);
+                var ptr = (void*)this.list[i];
+                if (ptr == null) continue;
+                ref var item = ref mref<StructComponentsItem<T>>(ptr);
                 item.Validate(entId);
 
             }
@@ -316,9 +322,7 @@ namespace ME.ECSBurst {
 
             if (this.components->Has<T>(entity.id) == false) {
 
-                this.filters->OnBeforeAddComponent<T>(in entity);
-                this.components->Set<T>(entity.id, default);
-                this.storage->versions.Increment(entity.id);
+                this.Set<T>(in entity, default);
 
             }
             

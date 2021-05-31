@@ -39,7 +39,6 @@ namespace ME.ECSBurst {
 
             filter.id = this.filters.Length;
             filter.entities = PoolArrayNative<byte>.Spawn(10);
-            this.filters.Add(filter);
             
             // For each entity in world - create
             var entities = filter.storage->GetAlive();
@@ -51,6 +50,8 @@ namespace ME.ECSBurst {
 
             }
             
+            this.filters.Add(filter);
+
             return filter;
 
         }
@@ -269,6 +270,8 @@ namespace ME.ECSBurst {
             Filter.current = FilterEntry.Empty;
             this.storage = world.currentState->storage;
             variable = world.currentState->AddFilter(ref this);
+            var ptr = variable.entities.arr.GetUnsafePtr();
+            UnityEngine.Debug.Log(string.Format("Create filter: {0}", (System.IntPtr)ptr));
             return variable;
 
         }
