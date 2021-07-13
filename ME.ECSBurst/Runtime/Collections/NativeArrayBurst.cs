@@ -48,6 +48,12 @@ namespace ME.ECSBurst.Collections {
 
         }
 
+        public readonly void* GetUnsafeReadOnlyPtr() {
+
+            return this.m_Buffer;
+
+        }
+
         public NativeArrayBurst(NativeArray<T> array, Allocator allocator) {
         
             NativeArrayBurst<T>.Allocate(array.Length, allocator, out this);

@@ -3,19 +3,20 @@ namespace ME.ECSBurst {
     
     using Collections;
     using Unity.Collections.LowLevel.Unsafe;
+    using static MemUtilsCuts;
 
     #if ECS_COMPILE_IL2CPP_OPTIONS
     [Unity.IL2CPP.CompilerServices.Il2CppSetOptionAttribute(Unity.IL2CPP.CompilerServices.Option.NullChecks, false),
      Unity.IL2CPP.CompilerServices.Il2CppSetOptionAttribute(Unity.IL2CPP.CompilerServices.Option.ArrayBoundsChecks, false),
      Unity.IL2CPP.CompilerServices.Il2CppSetOptionAttribute(Unity.IL2CPP.CompilerServices.Option.DivideByZeroChecks, false)]
     #endif
-    public struct Filters {
+    public unsafe struct Filters {
 
-        public NativeListBurst<Filter> filters;
+        public NativeListBurst<System.IntPtr> filters;
 
         public void Initialize() {
 
-            this.filters = new NativeListBurst<Filter>(DefaultConfig.FILTERS_CAPACITY, Unity.Collections.Allocator.Persistent);
+            this.filters = new NativeListBurst<System.IntPtr>(DefaultConfig.FILTERS_CAPACITY, Unity.Collections.Allocator.Persistent);
             
         }
         
@@ -25,34 +26,42 @@ namespace ME.ECSBurst {
 
         }
         
-        public unsafe Filter Add(ref Filter filter) {
+        public FilterData* Add(ref FilterData filterData) {
 
             for (int i = 0; i < this.filters.Length; ++i) {
 
-                if (this.filters[i].IsEquals(in filter) == true) {
+                if (((FilterData*)this.filters[i])->IsEquals(in filterData) == true) {
                     
-                    return this.filters[i];
+                    UnityEngine.Debug.Log("Found equals: " + filterData.id);
+                    return (FilterData*)this.filters[i];
                     
                 }
                 
             }
 
-            filter.id = this.filters.Length;
-            filter.entities = PoolArrayNative<byte>.Spawn(10);
+            filterData.id = this.filters.Length;
+            filterData.entities = PoolArrayNative<byte>.Spawn(10);
             
             // For each entity in world - create
-            var entities = filter.storage->GetAlive();
-            filter.Validate(filter.storage->GetMaxId());
+            var entities = filterData.storage->GetAlive();
+            filterData.Validate(filterData.storage->GetMaxId());
             for (int i = 0, cnt = entities.Length; i < cnt; ++i) {
 
-                var ent = filter.storage->cache[entities[i]];
-                filter.UpdateEntity(in ent);
+                var ent = filterData.storage->cache[entities[i]];
+                filterData.UpdateEntity(in ent);
 
             }
-            
-            this.filters.Add(filter);
 
-            return filter;
+            var ptr = tnew(ref filterData);
+            this.filters.Add((System.IntPtr)ptr);
+
+            return ptr;
+
+        }
+
+        private FilterData* GetPtr(int index) {
+
+            return (FilterData*)this.filters[index];
 
         }
 
@@ -60,7 +69,7 @@ namespace ME.ECSBurst {
             
             for (int i = 0; i < this.filters.Length; ++i) {
                 
-                this.filters[i].AddEntityCheckComponent<T>(in entity);
+                this.GetPtr(i)->AddEntityCheckComponent<T>(in entity);
                 
             }
 
@@ -70,7 +79,7 @@ namespace ME.ECSBurst {
             
             for (int i = 0; i < this.filters.Length; ++i) {
                 
-                this.filters[i].RemoveEntityCheckComponent<T>(in entity);
+                this.GetPtr(i)->RemoveEntityCheckComponent<T>(in entity);
                 
             }
 
@@ -80,7 +89,7 @@ namespace ME.ECSBurst {
 
             for (int i = 0; i < this.filters.Length; ++i) {
                 
-                this.filters.GetRef(i).OnEntityCreate(in entity);
+                this.GetPtr(i)->OnEntityCreate(in entity);
                 
             }
 
@@ -90,7 +99,7 @@ namespace ME.ECSBurst {
 
             for (int i = 0; i < this.filters.Length; ++i) {
                 
-                this.filters[i].RemoveEntity(in entity);
+                this.GetPtr(i)->RemoveEntity(in entity);
                 
             }
 
@@ -98,33 +107,28 @@ namespace ME.ECSBurst {
 
     }
 
-    #if ECS_COMPILE_IL2CPP_OPTIONS
-    [Unity.IL2CPP.CompilerServices.Il2CppSetOptionAttribute(Unity.IL2CPP.CompilerServices.Option.NullChecks, false),
-     Unity.IL2CPP.CompilerServices.Il2CppSetOptionAttribute(Unity.IL2CPP.CompilerServices.Option.ArrayBoundsChecks, false),
-     Unity.IL2CPP.CompilerServices.Il2CppSetOptionAttribute(Unity.IL2CPP.CompilerServices.Option.DivideByZeroChecks, false)]
-    #endif
     public unsafe struct Filter {
 
         public struct Enumerator : System.Collections.Generic.IEnumerator<Entity> {
 
-            private Filter filter;
+            private FilterData* filterData;
             private int index;
             private NativeBufferArray<Entity> cache;
 
-            public Enumerator(Filter filter) {
+            public Enumerator(FilterData* filterData) {
                 
-                this.filter = filter;
+                this.filterData = filterData;
                 this.index = -1;
-                this.cache = filter.storage->cache;
+                this.cache = filterData->storage->cache;
 
             }
 
             public bool MoveNext() {
 
                 ++this.index;
-                while (this.index < this.filter.entities.Length) {
+                while (this.index < this.filterData->entities.Length) {
 
-                    var state = this.filter.entities[this.index];
+                    var state = this.filterData->entities[this.index];
                     if (state == 0) {
                         ++this.index;
                         continue;
@@ -152,12 +156,86 @@ namespace ME.ECSBurst {
             public void Dispose() {
 
                 this.index = default;
-                this.filter = default;
+                this.filterData = default;
                 this.cache = default;
 
             }
 
         }
+
+        [NativeDisableUnsafePtrRestriction]
+        public FilterData* ptr;
+
+        #region Public API
+        public Enumerator GetEnumerator() {
+            
+            return new Enumerator(this.ptr);
+            
+        }
+
+        public struct FilterEntry {
+            
+            public static FilterEntry Empty = new FilterEntry() { isCreated = false };
+            public static FilterEntry New = new FilterEntry() { isCreated = true };
+
+            public bool isCreated;
+            public Archetype contains;
+            public Archetype notContains;
+
+            public FilterEntry With<T>() {
+                
+                WorldUtilities.UpdateComponentTypeId<T>();
+                Filter.current.contains.Add<T>();
+                return this;
+
+            }
+
+            public FilterEntry Without<T>() {
+                
+                WorldUtilities.UpdateComponentTypeId<T>();
+                Filter.current.notContains.Add<T>();
+                return this;
+
+            }
+
+            public Filter Push() {
+
+                return new FilterData().Set(this).Push();
+
+            }
+
+            public Filter Push(ref Filter filterData) {
+
+                return new FilterData().Set(this).Push(ref filterData);
+
+            }
+
+        }
+
+        internal static FilterEntry current;
+        public static FilterEntry With<T>() {
+            
+            if (Filter.current.isCreated == false) Filter.current = FilterEntry.New;
+            return Filter.current.With<T>();
+            
+        }
+
+        public static FilterEntry Without<T>() {
+            
+            if (Filter.current.isCreated == false) Filter.current = FilterEntry.New;
+            return Filter.current.Without<T>();
+            
+        }
+        #endregion
+
+    }
+
+    #if ECS_COMPILE_IL2CPP_OPTIONS
+    [Unity.IL2CPP.CompilerServices.Il2CppSetOptionAttribute(Unity.IL2CPP.CompilerServices.Option.NullChecks, false),
+     Unity.IL2CPP.CompilerServices.Il2CppSetOptionAttribute(Unity.IL2CPP.CompilerServices.Option.ArrayBoundsChecks, false),
+     Unity.IL2CPP.CompilerServices.Il2CppSetOptionAttribute(Unity.IL2CPP.CompilerServices.Option.DivideByZeroChecks, false)]
+    #endif
+    public unsafe struct FilterData {
 
         public int id;
         [NativeDisableUnsafePtrRestriction]
@@ -237,7 +315,7 @@ namespace ME.ECSBurst {
             
         }
         
-        internal Filter Set(FilterEntry entry) {
+        internal FilterData Set(Filter.FilterEntry entry) {
 
             this.contains = entry.contains;
             this.notContains = entry.notContains;
@@ -267,85 +345,25 @@ namespace ME.ECSBurst {
 
         internal Filter Push(ref World world, ref Filter variable) {
 
-            Filter.current = FilterEntry.Empty;
+            Filter.current = Filter.FilterEntry.Empty;
             this.storage = world.currentState->storage;
-            variable = world.currentState->AddFilter(ref this);
-            var ptr = variable.entities.arr.GetUnsafePtr();
-            UnityEngine.Debug.Log(string.Format("Create filter: {0}", (System.IntPtr)ptr));
+            var filterDataPtr = world.currentState->AddFilter(ref this);
+            variable = new Filter() {
+                ptr = filterDataPtr,
+            };
+            UnityEngine.Debug.Log($"Create filter #{variable.ptr->id}, ptr: {(System.IntPtr)variable.ptr} + {(System.IntPtr)variable.ptr->entities.arr.GetUnsafeReadOnlyPtr()}");
             return variable;
 
         }
         
-        internal bool IsEquals(in Filter filter) {
+        internal bool IsEquals(in FilterData filterData) {
 
-            return this.contains == filter.contains &&
-                   this.notContains == filter.notContains;
+            return this.contains == filterData.contains &&
+                   this.notContains == filterData.notContains;
             
         }
         #endregion
         
-        #region Public API
-        public Enumerator GetEnumerator() {
-            
-            return new Enumerator(this);
-            
-        }
-
-        public struct FilterEntry {
-            
-            public static FilterEntry Empty = new FilterEntry() { isCreated = false };
-            public static FilterEntry New = new FilterEntry() { isCreated = true };
-
-            public bool isCreated;
-            public Archetype contains;
-            public Archetype notContains;
-
-            public FilterEntry With<T>() {
-                
-                WorldUtilities.UpdateComponentTypeId<T>();
-                Filter.current.contains.Add<T>();
-                return this;
-
-            }
-
-            public FilterEntry Without<T>() {
-                
-                WorldUtilities.UpdateComponentTypeId<T>();
-                Filter.current.notContains.Add<T>();
-                return this;
-
-            }
-
-            public Filter Push() {
-
-                return new Filter().Set(this).Push();
-
-            }
-
-            public Filter Push(ref Filter filter) {
-
-                return new Filter().Set(this).Push(ref filter);
-
-            }
-
-        }
-
-        private static FilterEntry current;
-        public static FilterEntry With<T>() {
-            
-            if (Filter.current.isCreated == false) Filter.current = FilterEntry.New;
-            return Filter.current.With<T>();
-            
-        }
-
-        public static FilterEntry Without<T>() {
-            
-            if (Filter.current.isCreated == false) Filter.current = FilterEntry.New;
-            return Filter.current.Without<T>();
-            
-        }
-        #endregion
-
     }
 
 }

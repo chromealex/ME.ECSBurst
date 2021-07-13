@@ -19,14 +19,14 @@ namespace ME.ECSBurst.Tests {
         [Unity.Burst.BurstCompileAttribute]
         public struct TestSystem : IOnCreate, IAdvanceTick {
 
-            public Filter filter;
+            public Filter filterData;
             public World world;
             
             public void OnCreate() {
 
                 this.world = Worlds.currentWorld;
                 UnityEngine.Debug.Log("OnCreate, world: " + this.world);
-                Filter.With<Item>().Without<Item2>().Push(ref this.filter);
+                Filter.With<Item>().Without<Item2>().Push(ref this.filterData);
 
             }
             
@@ -50,7 +50,7 @@ namespace ME.ECSBurst.Tests {
                 UnityEngine.Debug.Log(string.Format("{0}", a2.a));
                 a2.a = 234;
                 
-                foreach (var ent in filter) {
+                foreach (var ent in this.filterData) {
 
                     UnityEngine.Debug.Log(string.Format("ENTITY #{0} gen {1}", ent.id, ent.generation));
                     this.world.RemoveEntity(in ent);
@@ -59,7 +59,7 @@ namespace ME.ECSBurst.Tests {
                 
                 UnityEngine.Debug.Log(string.Format("ISALIVE: {0}", this.world.IsAlive(entity)));
 
-                foreach (var ent in filter) {
+                foreach (var ent in this.filterData) {
 
                     UnityEngine.Debug.Log(string.Format("ENTITY #{0} gen {1}", ent.id, ent.generation));
                 

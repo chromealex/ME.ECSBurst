@@ -241,9 +241,9 @@ namespace ME.ECSBurst {
 
         }
 
-        public Filter AddFilter(ref Filter filter) {
+        public FilterData* AddFilter(ref FilterData filterData) {
             
-            return this.filters->Add(ref filter);
+            return this.filters->Add(ref filterData);
 
         }
 

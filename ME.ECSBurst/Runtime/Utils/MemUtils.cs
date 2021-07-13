@@ -23,14 +23,16 @@ namespace ME.ECSBurst {
         //[MethodImplAttribute(MethodImplOptions.AggressiveInlining)]
         public static void free(ref void* ptr, Unity.Collections.Allocator allocator = Unity.Collections.Allocator.Persistent) {
             
-            UnsafeUtility.Free(ptr, allocator);
+            //UnsafeUtility.Free(ptr, allocator);
+            System.Runtime.InteropServices.Marshal.FreeHGlobal((System.IntPtr)ptr);
             ptr = null;
             
         }
 
         public static void free<T>(ref T* ptr, Unity.Collections.Allocator allocator = Unity.Collections.Allocator.Persistent) where T : unmanaged {
             
-            UnsafeUtility.Free(ptr, allocator);
+            //UnsafeUtility.Free(ptr, allocator);
+            System.Runtime.InteropServices.Marshal.FreeHGlobal((System.IntPtr)ptr);
             ptr = null;
             
         }
@@ -85,7 +87,9 @@ namespace ME.ECSBurst {
         //[MethodImplAttribute(MethodImplOptions.AggressiveInlining)]
         public static T* Create<T>(ref T* ptr, ref T source, Unity.Collections.Allocator allocator = Unity.Collections.Allocator.Persistent) where T : unmanaged {
 
-            ptr = (T*)UnsafeUtility.Malloc(UnsafeUtility.SizeOf<T>(), UnsafeUtility.AlignOf<T>(), allocator);
+            var size = UnsafeUtility.SizeOf<T>();
+            ptr = (T*)System.Runtime.InteropServices.Marshal.AllocHGlobal(size);
+            //ptr = (T*)UnsafeUtility.Malloc(UnsafeUtility.SizeOf<T>(), UnsafeUtility.AlignOf<T>(), allocator);
             UnsafeUtility.CopyStructureToPtr(ref source, ptr);
             return ptr;
 
@@ -93,25 +97,30 @@ namespace ME.ECSBurst {
 
         public static T* Create<T>(ref T source, Unity.Collections.Allocator allocator = Unity.Collections.Allocator.Persistent) where T : unmanaged {
 
-            var ptr = UnsafeUtility.Malloc(UnsafeUtility.SizeOf<T>(), UnsafeUtility.AlignOf<T>(), allocator);
+            var size = UnsafeUtility.SizeOf<T>();
+            var ptr = (T*)System.Runtime.InteropServices.Marshal.AllocHGlobal(size);
+            //var ptr = UnsafeUtility.Malloc(UnsafeUtility.SizeOf<T>(), UnsafeUtility.AlignOf<T>(), allocator);
             UnsafeUtility.CopyStructureToPtr(ref source, ptr);
-            return (T*)ptr;
+            return ptr;
 
         }
 
         public static T* Create<T>(Unity.Collections.Allocator allocator = Unity.Collections.Allocator.Persistent) where T : unmanaged {
 
             var size = UnsafeUtility.SizeOf<T>();
-            var ptr = UnsafeUtility.Malloc(size, UnsafeUtility.AlignOf<T>(), allocator);
+            var ptr = (T*)System.Runtime.InteropServices.Marshal.AllocHGlobal(size);
+            //var ptr = UnsafeUtility.Malloc(size, UnsafeUtility.AlignOf<T>(), allocator);
             UnsafeUtility.MemClear(ptr, size);
-            return (T*)ptr;
+            return ptr;
 
         }
 
         //[MethodImplAttribute(MethodImplOptions.AggressiveInlining)]
         public static void* CreateFromStruct<T>(ref T source, Unity.Collections.Allocator allocator = Unity.Collections.Allocator.Persistent) where T : struct {
 
-            var ptr = UnsafeUtility.Malloc(UnsafeUtility.SizeOf<T>(), UnsafeUtility.AlignOf<T>(), allocator);
+            var size = UnsafeUtility.SizeOf<T>();
+            var ptr = (void*)System.Runtime.InteropServices.Marshal.AllocHGlobal(size);
+            //var ptr = UnsafeUtility.Malloc(UnsafeUtility.SizeOf<T>(), UnsafeUtility.AlignOf<T>(), allocator);
             UnsafeUtility.CopyStructureToPtr(ref source, ptr);
             return ptr;
 
@@ -119,7 +128,8 @@ namespace ME.ECSBurst {
         public static void* CreateFromStruct<T>(Unity.Collections.Allocator allocator = Unity.Collections.Allocator.Persistent) where T : struct {
 
             var size = UnsafeUtility.SizeOf<T>();
-            var ptr = UnsafeUtility.Malloc(size, UnsafeUtility.AlignOf<T>(), allocator);
+            var ptr = (void*)System.Runtime.InteropServices.Marshal.AllocHGlobal(size);
+            //var ptr = UnsafeUtility.Malloc(size, UnsafeUtility.AlignOf<T>(), allocator);
             UnsafeUtility.MemClear(ptr, size);
             return ptr;
 
@@ -127,7 +137,9 @@ namespace ME.ECSBurst {
 
         public static void* CreateFromStruct<T>(ref void* ptr, ref T source, Unity.Collections.Allocator allocator = Unity.Collections.Allocator.Persistent) where T : struct {
 
-            ptr = UnsafeUtility.Malloc(UnsafeUtility.SizeOf<T>(), UnsafeUtility.AlignOf<T>(), allocator);
+            var size = UnsafeUtility.SizeOf<T>();
+            ptr = (void*)System.Runtime.InteropServices.Marshal.AllocHGlobal(size);
+            //ptr = UnsafeUtility.Malloc(UnsafeUtility.SizeOf<T>(), UnsafeUtility.AlignOf<T>(), allocator);
             UnsafeUtility.CopyStructureToPtr(ref source, ptr);
             return ptr;
 

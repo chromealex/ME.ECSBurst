@@ -133,6 +133,7 @@ namespace ME.ECSBurst {
                 public Job* job;
                 [NativeDisableUnsafePtrRestriction]
                 public void* method;
+                public System.Runtime.InteropServices.GCHandle methodHandle;
                 [NativeDisableUnsafePtrRestriction]
                 public FunctionPointer<FunctionPointerDelegate> burstMethod;
                 public byte isJob;
@@ -147,6 +148,7 @@ namespace ME.ECSBurst {
                 public void* system;
                 [NativeDisableUnsafePtrRestriction]
                 public void* method;
+                public System.Runtime.InteropServices.GCHandle methodHandle;
 
             }
 
@@ -229,7 +231,8 @@ namespace ME.ECSBurst {
                 
                 for (int i = 0, cnt = arr.Length; i < cnt; ++i) {
 
-                    System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<SystemExecute>((System.IntPtr)arr[i].method).Invoke();
+                    var pinAddr = arr[i].method;
+                    System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<SystemExecute>((System.IntPtr)pinAddr).Invoke();
 
                 }
 
@@ -269,13 +272,16 @@ namespace ME.ECSBurst {
                     for (int i = 0, cnt = this.advanceTick.Length; i < cnt; ++i) {
 
                         ref var data = ref this.advanceTick.GetRef(i);
+                        if (data.methodHandle.IsAllocated == true) data.methodHandle.Free();
                         free(ref data.job);
 
                     }
 
                     for (int i = 0, cnt = this.allSystems.Length; i < cnt; ++i) {
 
-                        free(ref this.allSystems.GetRef(i).system);
+                        ref var data = ref this.allSystems.GetRef(i);
+                        if (data.methodHandle.IsAllocated == true) data.methodHandle.Free();
+                        free(ref data.system);
 
                     }
 
@@ -289,16 +295,18 @@ namespace ME.ECSBurst {
 
             }
 
-            public void* AddDispose<T>(T system) where T : struct, ISystem {
+            private void* AddSystemMethod_INTERNAL<T>(in T system, string method) where T : struct, ISystem {
 
-                ref var mainData = ref this.Add(ref system, ref this.allSystems);
+                var systemRef = system;
+                ref var mainData = ref this.Add(ref systemRef, ref this.allSystems);
+                ref var sysData = ref this.Add(mainData.system, ref this.updateVisual);
+                ref var sys = ref mref<T>(mainData.system);
                 
-                system = mref<T>(mainData.system);
+                var methodInfo = typeof(T).GetMethod(method, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), sys, methodInfo);
 
-                var methodInfo = typeof(T).GetMethod("OnDispose", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
-                var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
-                
-                ref var sysData = ref this.Add(mainData.system, ref this.disposable);
+                var handle = System.Runtime.InteropServices.GCHandle.Alloc(del);
+                sysData.methodHandle = handle;
                 sysData.method = (void*)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(del);
                 return mainData.system;
 
@@ -307,20 +315,21 @@ namespace ME.ECSBurst {
             public void* AddAdvanceTick<T>(T system) where T : struct, ISystem, IAdvanceTick {
 
                 ref var mainData = ref this.Add(ref system, ref this.allSystems);
-                
-                var burstCompile = typeof(T).GetCustomAttributes(typeof(BurstCompileAttribute), false);
-                var isBurstSystem = (burstCompile.Length > 0);
-
                 ref var sysData = ref this.Add(mainData.system, ref this.advanceTick);
                 sysData.id = mainData.id;
                 sysData.isJob = 0;
-                
+
+                var burstCompile = typeof(T).GetCustomAttributes(typeof(BurstCompileAttribute), false);
+                var isBurstSystem = (burstCompile.Length > 0);
+
                 if (isBurstSystem == true) {
 
                     sysData.isBurst = 1;
                     
                     Burst<T>.Prewarm();
                     sysData.burstMethod = Burst<T>.cache;
+                    Burst<T>.cache = default;
+                    Burst<T>.cacheDelegate = default;
 
                 } else {
 
@@ -331,6 +340,8 @@ namespace ME.ECSBurst {
                     var methodInfo = typeof(T).GetMethod("AdvanceTick", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
                     var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
 
+                    var handle = System.Runtime.InteropServices.GCHandle.Alloc(del);
+                    sysData.methodHandle = handle;
                     sysData.method = (void*)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(del);
 
                     var ptr = (System.IntPtr)sysData.method;
@@ -370,6 +381,9 @@ namespace ME.ECSBurst {
                     var methodInfo = typeof(T).GetMethod("AdvanceTick", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
                     var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
 
+                    var handle = System.Runtime.InteropServices.GCHandle.Alloc(del);
+                    sysData.methodHandle = handle;
+                    
                     sysData.method = (void*)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(del);
                     sysData.isJob = 1;
                     sysData.isBurst = 0;
@@ -384,34 +398,22 @@ namespace ME.ECSBurst {
 
             }
 
-            public void* AddVisual<T>(T system) where T : struct, ISystem {
+            public void* AddDispose<T>(in T system) where T : struct, ISystem {
 
-                ref var mainData = ref this.Add(ref system, ref this.allSystems);
+                return this.AddSystemMethod_INTERNAL(in system, "OnDispose");
                 
-                system = mref<T>(mainData.system);
+            }
 
-                var methodInfo = typeof(T).GetMethod("UpdateVisual", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
-                var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
+            public void* AddVisual<T>(in T system) where T : struct, ISystem {
 
-                ref var sysData = ref this.Add(mainData.system, ref this.updateVisual);
-                sysData.method = (void*)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(del);
-                return mainData.system;
+                return this.AddSystemMethod_INTERNAL(in system, "UpdateVisual");
 
             }
 
-            public void* AddInput<T>(T system) where T : struct, ISystem {
+            public void* AddInput<T>(in T system) where T : struct, ISystem {
 
-                ref var mainData = ref this.Add(ref system, ref this.allSystems);
-                
-                system = mref<T>(mainData.system);
+                return this.AddSystemMethod_INTERNAL(in system, "UpdateInput");
 
-                var methodInfo = typeof(T).GetMethod("UpdateInput", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
-                var del = (SystemExecute)SystemExecute.CreateDelegate(typeof(SystemExecute), system, methodInfo);
-
-                ref var sysData = ref this.Add(mainData.system, ref this.updateVisual);
-                sysData.method = (void*)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(del);
-                return mainData.system;
-                
             }
 
             public void Run(World* world, float dt) {
@@ -423,6 +425,7 @@ namespace ME.ECSBurst {
                     
                 }
                 
+                //UnityEngine.Debug.Log($"World: {(System.IntPtr)world}");
                 if (this.advanceTick.IsCreated == true) {
 
                     Worlds.time.Data.deltaTime = 0.033f;
@@ -572,7 +575,7 @@ namespace ME.ECSBurst {
                 
             }
             if (system is IOnDispose) {
-                ptr = this.systems->AddDispose(system);
+                ptr = this.systems->AddDispose(in system);
                 system = mref<T>(ptr);
             }
             if (system is IAdvanceTick) {
@@ -584,11 +587,11 @@ namespace ME.ECSBurst {
                 ptr = adder.Call(this.systems, ref system);
             }
             if (system is IUpdateVisual) {
-                ptr = this.systems->AddVisual(system);
+                ptr = this.systems->AddVisual(in system);
                 system = mref<T>(ptr);
             }
             if (system is IUpdateInput) {
-                ptr = this.systems->AddInput(system);
+                ptr = this.systems->AddInput(in system);
                 system = mref<T>(ptr);
             }
 
